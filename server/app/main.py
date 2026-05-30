@@ -44,7 +44,7 @@ def health_ready():
     checks = {
         "redis": False,
         "celery": False,
-        "chroma": False,
+        "faiss": False,
     }
     details = {}
 
@@ -63,13 +63,13 @@ def health_ready():
     except Exception as e:
         details["celery"] = str(e)
 
-    # Chroma check
+    # FAISS + metadata check
     try:
-        doc_count = vector_store.collection.count()
-        checks["chroma"] = True
-        details["chroma"] = {"status": "ok", "documents_count": doc_count}
+        doc_count = vector_store.count_documents()
+        checks["faiss"] = True
+        details["faiss"] = {"status": "ok", "documents_count": doc_count}
     except Exception as e:
-        details["chroma"] = str(e)
+        details["faiss"] = str(e)
 
     ready = all(checks.values())
     return {

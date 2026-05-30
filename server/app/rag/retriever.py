@@ -1,9 +1,10 @@
 ﻿from rank_bm25 import BM25Okapi
-from app.rag.vectorstore import ChromaVectorStore
+from typing import Any
+from app.rag.vectorstore import FaissVectorStore
 import numpy as np
 
 class HybridRetriever:
-    def __init__(self, vector_store: ChromaVectorStore):
+    def __init__(self, vector_store: Any):
         self.vector_store = vector_store
         self.bm25_index = None
         self.texts = []
@@ -15,9 +16,19 @@ class HybridRetriever:
         if getattr(self.vector_store, "_version", -1) == self._last_version and self.bm25_index is not None:
             return
 
-        data = self.vector_store.collection.get(include=["documents", "metadatas"])
-        docs = data.get("documents") or []
-        metas = data.get("metadatas") or []
+        # ask the vector store for all documents and metadatas
+        try:
+            docs, metas = self.vector_store.get_all_documents()
+        except Exception:
+            # fallback: try older collection-style attribute if present
+            data = getattr(self.vector_store, "collection", None)
+            if data:
+                data = data.get(include=["documents", "metadatas"]) if hasattr(data, "get") else {}
+                docs = data.get("documents") or []
+                metas = data.get("metadatas") or []
+            else:
+                docs = []
+                metas = []
 
         if not docs:
             self.bm25_index = None

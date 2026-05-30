@@ -1,3 +1,11 @@
 venv/
 __pycache__/
 .env
+faiss/
+faiss_check/
+uploads/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/

@@ -1,11 +1,11 @@
-from app.rag.vectorstore import ChromaVectorStore
+from app.rag.vectorstore import FaissVectorStore
 from app.rag.retriever import HybridRetriever
 from app.memory.redis import RedisMemory
 from app.llm.llm_model import generate_answer
 from app.utils.chunking import semantic_chunk_text
 from app.celery_worker import celery_app
 
-vector_store = ChromaVectorStore(persist_dir="chroma")
+vector_store = FaissVectorStore(persist_dir="faiss")
 retriever = HybridRetriever(vector_store)
 memory = RedisMemory()
 

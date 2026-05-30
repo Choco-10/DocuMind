@@ -1,0 +1,12 @@
+name: rag-faiss
+channels:
+  - pytorch
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.11
+  - pip
+  - cudatoolkit=11.8
+  - faiss-gpu=1.9.0
+  - pip:
+      - -r requirements.txt
