@@ -109,6 +109,7 @@ def build_messages(question: str, context: str, history_messages: Optional[List[
     system_prompt = (
         "/no_think\n"
         "Answer using ONLY the provided context.\n"
+        "The context is organized as labeled evidence blocks. Use the most relevant blocks and ignore the rest.\n"
         "If the context does not contain the answer, respond exactly:\n"
         "I don't know."
     )

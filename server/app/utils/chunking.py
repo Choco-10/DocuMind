@@ -3,9 +3,9 @@ from typing import List
 
 def semantic_chunk_text(
     text: str,
-    max_len: int = 900,
-    overlap: int = 120,
-    min_chunk_len: int = 80
+    max_len: int = 750,
+    overlap: int = 140,
+    min_chunk_len: int = 100
 ) -> List[str]:
     """
     Sentence-aware chunking with overlap.

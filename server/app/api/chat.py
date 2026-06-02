@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import json
 
-from app.rag.pipeline import query_rag, retriever, memory
+from app.rag.pipeline import query_rag, retriever, memory, _format_context
 from app.llm.llm_model import stream_answer, sanitize_generated_text
 
 router = APIRouter()
@@ -29,7 +29,9 @@ def chat_stream(req: ChatRequest):
     def event_generator():
         history = memory.get_history(req.session_id)
         history_messages = _recent_history(history)
-        retrieved = retriever.retrieve(req.question, top_k=req.top_k)
+        candidate_k = max(100, req.top_k * 20)
+        context_k = max(req.top_k, 8)
+        retrieved = retriever.retrieve(req.question, top_k=context_k, candidate_k=candidate_k, source_limit=2)
 
         if not retrieved:
             answer = "No relevant documents found."
@@ -39,7 +41,7 @@ def chat_stream(req: ChatRequest):
             yield "data: [DONE]\n\n"
             return
 
-        context = "\n".join([r["text"] for r in retrieved])
+        context = _format_context(retrieved)
         sources = [{"source": r.get("source", "unknown"), "chunk_id": r.get("chunk_id", -1)} for r in retrieved]
 
         parts = []

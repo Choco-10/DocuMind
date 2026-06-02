@@ -1,4 +1,4 @@
-﻿from typing import List, Optional
+from typing import List, Optional, Union
 from pathlib import Path
 import sqlite3
 import json
@@ -75,7 +75,7 @@ class FaissVectorStore:
         norms[norms == 0] = 1.0
         return vectors / norms
 
-    def add(self, texts: List[str], source: str, stored_filename: Optional[str] = None):
+    def add(self, texts: List[str], source: Union[str, List[str]], stored_filename: Optional[str] = None):
         if not texts:
             return
 
@@ -86,9 +86,11 @@ class FaissVectorStore:
         cur = self._conn.cursor()
         ids = []
         for i, text in enumerate(texts):
+            # Support per-text source (list) or single source for all texts
+            src_val = source[i] if isinstance(source, list) and i < len(source) else source
             cur.execute(
                 "INSERT INTO documents (source, chunk_id, stored_filename, text) VALUES (?, ?, ?, ?)",
-                (source, i, stored_filename, text),
+                (src_val, i, stored_filename, text),
             )
             ids.append(cur.lastrowid)
         self._conn.commit()
@@ -115,6 +117,65 @@ class FaissVectorStore:
 
         self._version += 1
 
+    def batch_add(
+        self,
+        texts: List[str],
+        sources: List[str],
+        chunk_ids: List[int],
+        stored_filenames: Optional[List[str]] = None,
+        batch_size: int = 512
+    ):
+        """Adds multiple chunks in a single batched operation.
+        
+        This minimizes SQLite transaction overhead and writes the FAISS index to disk
+        only once at the end.
+        """
+        if not texts:
+            return
+
+        from app.rag.embeddings import get_embeddings
+        
+        # 1. Compute embeddings in batch
+        embeddings = get_embeddings(texts, batch_size=batch_size)
+        vecs = np.array(embeddings, dtype="float32")
+        vecs = self._normalize(vecs)
+
+        # 2. Insert into SQLite in a single transaction
+        cur = self._conn.cursor()
+        ids = []
+        
+        for i, (text, source, chunk_id) in enumerate(zip(texts, sources, chunk_ids)):
+            filename = stored_filenames[i] if stored_filenames else None
+            cur.execute(
+                "INSERT INTO documents (source, chunk_id, stored_filename, text) VALUES (?, ?, ?, ?)",
+                (source, chunk_id, filename, text),
+            )
+            ids.append(cur.lastrowid)
+        self._conn.commit()
+
+        # 3. Add to CPU index and write to disk once
+        ids_arr = np.array(ids, dtype="int64")
+        try:
+            self._cpu_index.add_with_ids(vecs, ids_arr)
+            faiss.write_index(self._cpu_index, str(self._index_path))
+            
+            # 4. Rebuild GPU index once
+            if self._gpu_res is not None:
+                try:
+                    self._gpu_index = faiss.index_cpu_to_gpu(self._gpu_res, 0, self._cpu_index)
+                except Exception:
+                    self._gpu_index = None
+        except Exception:
+            # Roll back SQLite insertions on FAISS failure
+            cur = self._conn.cursor()
+            for _id in ids:
+                cur.execute("DELETE FROM documents WHERE id=?", (_id,))
+            self._conn.commit()
+            raise
+
+        self._version += 1
+
+
     def query(self, query: str, top_k: int = 5):
         q_vec = np.array([get_embedding(query)], dtype="float32")
         q_vec = self._normalize(q_vec)
@@ -130,12 +191,12 @@ class FaissVectorStore:
         for idx, dist in zip(ids, D[0].tolist()):
             if idx < 0:
                 continue
-            cur.execute("SELECT source, chunk_id, stored_filename, text FROM documents WHERE id=?", (int(idx),))
+            cur.execute("SELECT id, source, chunk_id, stored_filename, text FROM documents WHERE id=?", (int(idx),))
             row = cur.fetchone()
             if not row:
                 continue
-            source, chunk_id, stored_filename, text = row
-            meta = {"source": source, "chunk_id": chunk_id}
+            _id, source, chunk_id, stored_filename, text = row
+            meta = {"id": _id, "source": source, "chunk_id": chunk_id, "score": float(dist)}
             if stored_filename:
                 meta["stored_filename"] = stored_filename
             docs.append({"text": text, **meta})
@@ -213,15 +274,20 @@ class FaissVectorStore:
         return cur.fetchone()[0]
 
     def get_all_documents(self):
-        """Return documents and metadatas in a tuple similar to Chroma's get(include=["documents","metadatas"]) output."""
+        """Return ids, documents, and metadatas ordered by insertion id.
+
+        The ids list keeps downstream hybrid ranking stable and lets lexical and
+        semantic candidates be merged on the same document identity.
+        """
         cur = self._conn.cursor()
-        cur.execute("SELECT text, source, chunk_id, stored_filename FROM documents ORDER BY id ASC")
+        cur.execute("SELECT id, text, source, chunk_id, stored_filename FROM documents ORDER BY id ASC")
         rows = cur.fetchall()
-        documents = [r[0] for r in rows]
+        ids = [r[0] for r in rows]
+        documents = [r[1] for r in rows]
         metadatas = []
         for r in rows:
-            meta = {"source": r[1], "chunk_id": r[2]}
-            if r[3]:
-                meta["stored_filename"] = r[3]
+            meta = {"source": r[2], "chunk_id": r[3]}
+            if r[4]:
+                meta["stored_filename"] = r[4]
             metadatas.append(meta)
-        return documents, metadatas
+        return ids, documents, metadatas

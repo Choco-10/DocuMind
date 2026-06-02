@@ -1,6 +1,7 @@
 import os
 from sentence_transformers import SentenceTransformer
 from typing import List
+import torch
 
 
 def _env_true(name: str) -> bool:
@@ -16,8 +17,15 @@ LOCAL_FILES_ONLY = (
 
 # Load small, fast pre-trained model
 try:
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            f"CUDA is required for embeddings. EMBEDDING_MODEL='{EMBEDDING_MODEL}' will not be loaded on CPU."
+        )
+
+    device = "cuda"
     embed_model = SentenceTransformer(
         EMBEDDING_MODEL,
+        device=device,
         local_files_only=LOCAL_FILES_ONLY,
     )
 except Exception as e:
@@ -39,3 +47,20 @@ def get_embedding(text: str) -> List[float]:
         List of floats representing embedding.
     """
     return embed_model.encode(text).tolist()
+
+
+def get_embeddings(texts: List[str], batch_size: int = 512) -> List[List[float]]:
+    """
+    Converts a list of text strings into a list of embedding vectors using batching.
+    
+    Args:
+        texts: List of text strings to embed.
+        batch_size: Batch size to use for SentenceTransformer.encode.
+    
+    Returns:
+        List of lists of floats representing embeddings.
+    """
+    if not texts:
+        return []
+    return embed_model.encode(texts, batch_size=batch_size, show_progress_bar=False).tolist()
+
