@@ -8,7 +8,7 @@ celery_app = Celery(
     "rag_tasks",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=["app.rag.pipeline"],  # important
+    include=["app.rag.pipeline"],
 )
 
 celery_app.conf.update(

@@ -27,15 +27,12 @@ class HybridRetriever:
         return (scores - min_score) / (max_score - min_score)
 
     def _build_bm25(self):
-        # Only rebuild when vector store version changes
         if getattr(self.vector_store, "_version", -1) == self._last_version and self.bm25_index is not None:
             return
 
-        # ask the vector store for all documents and metadatas
         try:
             docs_result = self.vector_store.get_all_documents()
         except Exception:
-            # fallback: try older collection-style attribute if present
             data = getattr(self.vector_store, "collection", None)
             if data:
                 data = data.get(include=["documents", "metadatas"]) if hasattr(data, "get") else {}
@@ -61,7 +58,6 @@ class HybridRetriever:
             self._last_version = getattr(self.vector_store, "_version", -1)
             return
 
-        # flatten if nested
         if isinstance(docs[0], list):
             flat_docs = [d for sub in docs for d in sub if isinstance(d, str)]
         else:
@@ -80,7 +76,6 @@ class HybridRetriever:
         self._last_version = getattr(self.vector_store, "_version", -1)
 
     def retrieve(self, query: str, top_k=5, candidate_k: int | None = None, source_limit: int = 2):
-        # ensure indexes reflect latest data
         self._build_bm25()
 
         if not self.bm25_index:
@@ -97,7 +92,6 @@ class HybridRetriever:
 
         semantic_results = self.vector_store.query(query, top_k=candidate_k)
 
-        # Collect candidates by stable id so lexical and semantic signals merge.
         candidates = {}
 
         bm25_norm = self._normalize_scores(bm25_scores)
@@ -151,7 +145,6 @@ class HybridRetriever:
 
         scored.sort(key=lambda item: item["score"], reverse=True)
 
-        # Keep diversity across sources so one long document doesn't crowd out all evidence.
         diversified = []
         per_source_counts = {}
         for item in scored:

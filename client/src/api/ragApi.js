@@ -17,11 +17,6 @@ export const uploadDocument = async (file, onProgress) => {
   return res.data;
 };
 
-export const getTaskStatus = async (taskId) => {
-  const res = await api.get(`/api/upload/task/${taskId}`);
-  return res.data;
-};
-
 export const getDocuments = async () => {
   const res = await api.get("/api/upload/documents");
   return res.data;
@@ -34,15 +29,6 @@ export const deleteDocument = async (source) => {
 
 export const clearDocuments = async () => {
   const res = await api.delete("/api/upload/documents");
-  return res.data;
-};
-
-export const askRagQuery = async ({ question, session_id, top_k = 5 }) => {
-  const res = await api.post("/api/chat", {
-    question,
-    session_id,
-    top_k,
-  });
   return res.data;
 };
 

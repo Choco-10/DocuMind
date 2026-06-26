@@ -7,12 +7,6 @@ def semantic_chunk_text(
     overlap: int = 140,
     min_chunk_len: int = 100
 ) -> List[str]:
-    """
-    Sentence-aware chunking with overlap.
-    - Cleans whitespace
-    - Avoids tiny chunks
-    - Adds bounded overlap for continuity
-    """
     if not text:
         return []
 

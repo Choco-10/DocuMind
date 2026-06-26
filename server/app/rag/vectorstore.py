@@ -1,7 +1,6 @@
 from typing import List, Optional, Union
 from pathlib import Path
 import sqlite3
-import json
 import numpy as np
 import faiss
 
@@ -9,14 +8,6 @@ from app.rag.embeddings import get_embedding
 
 
 class FaissVectorStore:
-    """FAISS-backed vector store with SQLite metadata.
-
-    Notes:
-    - Stores vectors in a FAISS IndexIDMap (persisted to disk).
-    - Stores document metadata and text in a SQLite DB under `persist_dir`.
-    - Uses GPU index when available (faiss GPU index created from CPU index).
-    """
-
     def __init__(self, persist_dir: Optional[str] = None):
         default_dir = Path(__file__).resolve().parents[2] / "faiss"
         self.persist_dir = Path(persist_dir) if persist_dir else default_dir
@@ -28,11 +19,9 @@ class FaissVectorStore:
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._ensure_tables()
 
-        # load embedding dim by probing embedding model
         sample = get_embedding("test")
         self.dim = len(sample)
 
-        # CPU index (IndexIDMap to accept explicit ids)
         self._cpu_index = faiss.IndexIDMap(faiss.IndexFlatIP(self.dim))
         self._gpu_index = None
         self._gpu_res = None
@@ -40,12 +29,10 @@ class FaissVectorStore:
         if self._index_path.exists():
             try:
                 cpu_idx = faiss.read_index(str(self._index_path))
-                # keep CPU index
                 self._cpu_index = cpu_idx
             except Exception:
                 pass
 
-        # try create GPU index
         try:
             self._gpu_res = faiss.StandardGpuResources()
             self._gpu_index = faiss.index_cpu_to_gpu(self._gpu_res, 0, self._cpu_index)
@@ -70,7 +57,6 @@ class FaissVectorStore:
         self._conn.commit()
 
     def _normalize(self, vectors: np.ndarray) -> np.ndarray:
-        # L2-normalize for cosine similarity using inner product
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return vectors / norms
@@ -86,7 +72,6 @@ class FaissVectorStore:
         cur = self._conn.cursor()
         ids = []
         for i, text in enumerate(texts):
-            # Support per-text source (list) or single source for all texts
             src_val = source[i] if isinstance(source, list) and i < len(source) else source
             cur.execute(
                 "INSERT INTO documents (source, chunk_id, stored_filename, text) VALUES (?, ?, ?, ?)",
@@ -97,18 +82,14 @@ class FaissVectorStore:
 
         ids_arr = np.array(ids, dtype="int64")
         try:
-            # add to CPU index (with ids)
             self._cpu_index.add_with_ids(vecs, ids_arr)
-            # persist cpu index
             faiss.write_index(self._cpu_index, str(self._index_path))
-            # rebuild gpu index
             if self._gpu_res is not None:
                 try:
                     self._gpu_index = faiss.index_cpu_to_gpu(self._gpu_res, 0, self._cpu_index)
                 except Exception:
                     self._gpu_index = None
         except Exception:
-            # rollback DB rows if index add fails
             cur = self._conn.cursor()
             for _id in ids:
                 cur.execute("DELETE FROM documents WHERE id=?", (_id,))
@@ -125,25 +106,18 @@ class FaissVectorStore:
         stored_filenames: Optional[List[str]] = None,
         batch_size: int = 512
     ):
-        """Adds multiple chunks in a single batched operation.
-        
-        This minimizes SQLite transaction overhead and writes the FAISS index to disk
-        only once at the end.
-        """
         if not texts:
             return
 
         from app.rag.embeddings import get_embeddings
-        
-        # 1. Compute embeddings in batch
+
         embeddings = get_embeddings(texts, batch_size=batch_size)
         vecs = np.array(embeddings, dtype="float32")
         vecs = self._normalize(vecs)
 
-        # 2. Insert into SQLite in a single transaction
         cur = self._conn.cursor()
         ids = []
-        
+
         for i, (text, source, chunk_id) in enumerate(zip(texts, sources, chunk_ids)):
             filename = stored_filenames[i] if stored_filenames else None
             cur.execute(
@@ -153,20 +127,17 @@ class FaissVectorStore:
             ids.append(cur.lastrowid)
         self._conn.commit()
 
-        # 3. Add to CPU index and write to disk once
         ids_arr = np.array(ids, dtype="int64")
         try:
             self._cpu_index.add_with_ids(vecs, ids_arr)
             faiss.write_index(self._cpu_index, str(self._index_path))
-            
-            # 4. Rebuild GPU index once
+
             if self._gpu_res is not None:
                 try:
                     self._gpu_index = faiss.index_cpu_to_gpu(self._gpu_res, 0, self._cpu_index)
                 except Exception:
                     self._gpu_index = None
         except Exception:
-            # Roll back SQLite insertions on FAISS failure
             cur = self._conn.cursor()
             for _id in ids:
                 cur.execute("DELETE FROM documents WHERE id=?", (_id,))
@@ -218,7 +189,6 @@ class FaissVectorStore:
 
         ids_arr = np.array(ids, dtype="int64")
         try:
-            # remove from index
             self._cpu_index.remove_ids(ids_arr)
             faiss.write_index(self._cpu_index, str(self._index_path))
             if self._gpu_res is not None:
@@ -274,11 +244,6 @@ class FaissVectorStore:
         return cur.fetchone()[0]
 
     def get_all_documents(self):
-        """Return ids, documents, and metadatas ordered by insertion id.
-
-        The ids list keeps downstream hybrid ranking stable and lets lexical and
-        semantic candidates be merged on the same document identity.
-        """
         cur = self._conn.cursor()
         cur.execute("SELECT id, text, source, chunk_id, stored_filename FROM documents ORDER BY id ASC")
         rows = cur.fetchall()

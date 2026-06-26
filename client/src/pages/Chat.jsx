@@ -121,7 +121,6 @@ export default function Chat() {
           },
           onMeta: (meta) => {
             if (meta.sources) {
-              // Handle sources if needed
               console.log("Sources:", meta.sources);
             }
           },

@@ -1,7 +1,3 @@
-"""Check FAISS GPU availability and verify FaissVectorStore uses GPU.
-
-Run this inside your Windows env after installing FAISS.
-"""
 from pathlib import Path
 import sys
 import traceback
@@ -22,7 +18,6 @@ def run_check():
         traceback.print_exc()
         return 2
 
-    # Try GPU resources
     try:
         res = faiss.StandardGpuResources()
         print("StandardGpuResources created.")
@@ -51,7 +46,6 @@ def run_check():
         traceback.print_exc()
         print("Try installing a matching CUDA toolkit or use faiss-cpu if no GPU available.")
 
-    # Check our FaissVectorStore
     try:
         from app.rag.vectorstore import FaissVectorStore
         print("Found FaissVectorStore in project.")
@@ -60,7 +54,6 @@ def run_check():
         print('FaissVectorStore _gpu_index present:', gpu_present)
         print('Persist dir:', store.persist_dir)
         print('Document count (initial):', store.count_documents())
-        # quick roundtrip
         store.clear_documents()
         store.add(['hello from check'], source='check_doc')
         print('Document count (after add):', store.count_documents())

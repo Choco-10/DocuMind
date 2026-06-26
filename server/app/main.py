@@ -48,14 +48,12 @@ def health_ready():
     }
     details = {}
 
-    # Redis check
     try:
         checks["redis"] = bool(memory.client.ping())
         details["redis"] = "ok"
     except Exception as e:
         details["redis"] = str(e)
 
-    # Celery check (worker responsiveness)
     try:
         ping_result = celery_app.control.inspect(timeout=1).ping()
         checks["celery"] = bool(ping_result)
@@ -63,7 +61,6 @@ def health_ready():
     except Exception as e:
         details["celery"] = str(e)
 
-    # FAISS + metadata check
     try:
         doc_count = vector_store.count_documents()
         checks["faiss"] = True

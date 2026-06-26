@@ -1,13 +1,3 @@
-"""TREC-style evaluation using the app's pipeline.
-
-The script stays fully under `server/`:
-- Downloads the TREC-COVID dataset into `server/data/trec-covid/` if needed.
-- Reuses a persistent FAISS datastore under `server/data/trec-covid/faiss/`.
-- Ingests with the app's chunking and retrieves with the app's hybrid retriever.
-
-Usage:
-    conda run -n rag-faiss --no-capture-output python server/scripts/pipeline_trec_eval.py --dataset trec-covid --split test --ingest
-"""
 import argparse
 import json
 import os
@@ -84,7 +74,6 @@ def ensure_dataset(dataset: str, split: str) -> tuple[Path, Path, Path]:
     if loaded_corpus.exists() and loaded_queries.exists() and loaded_qrels.exists():
         return loaded_corpus, loaded_queries, loaded_qrels
 
-    # Some BEIR archives unpack to a nested directory. Search one level deeper.
     for candidate in downloaded.rglob("corpus.jsonl"):
         candidate_queries = candidate.parent / "queries.jsonl"
         candidate_qrels = candidate.parent / "qrels" / f"{split}.tsv"
@@ -106,7 +95,7 @@ def ingest_corpus(vector_store: FaissVectorStore, corpus: Dict[str, Dict[str, st
     corpus_ids = list(corpus.keys())
     total = len(corpus_ids)
     ingest_started_at = time.perf_counter()
-    
+
     batch_texts = []
     batch_sources = []
     batch_chunk_ids = []
@@ -120,12 +109,12 @@ def ingest_corpus(vector_store: FaissVectorStore, corpus: Dict[str, Dict[str, st
         chunks = semantic_chunk_text(text)
         if not chunks:
             continue
-        
+
         for chunk_id, chunk_text in enumerate(chunks):
             batch_texts.append(chunk_text)
             batch_sources.append(str(cid))
             batch_chunk_ids.append(chunk_id)
-            
+
         if len(batch_sources) >= batch_docs_limit or i == total:
             if batch_texts:
                 vector_store.batch_add(
@@ -137,7 +126,7 @@ def ingest_corpus(vector_store: FaissVectorStore, corpus: Dict[str, Dict[str, st
                 batch_texts.clear()
                 batch_sources.clear()
                 batch_chunk_ids.clear()
-                
+
             elapsed = time.perf_counter() - ingest_started_at
             rate = i / elapsed if elapsed > 0 else 0.0
             remaining = (total - i) / rate if rate > 0 else 0.0
@@ -188,7 +177,6 @@ def main():
 
     corpus_path, queries_path, qrels_path = ensure_dataset(args.dataset, args.split)
 
-    # initialize a reusable server-local vector store
     vector_store = FaissVectorStore(persist_dir=str(SERVER_ROOT / "data" / args.dataset / "faiss"))
     retriever = HybridRetriever(vector_store)
 
@@ -228,18 +216,14 @@ def main():
     total_queries = len(query_items)
     for query_number, (qid, qtext) in enumerate(query_items, start=1):
         retrieved = retriever.retrieve(qtext, top_k=args.top_k, candidate_k=max(1000, args.top_k), source_limit=2)
-        # map retrieved chunks to document ids (source)
         doc_scores = {}
         for rank, item in enumerate(retrieved, start=1):
             docid = str(item.get("source") or "")
-            # score: use hybrid score but ensure it's a float
             score = float(item.get("score", 0.0))
             if not docid:
                 continue
-            # keep max score if duplicate sources appear
             doc_scores[docid] = max(doc_scores.get(docid, 0.0), score)
 
-        # ensure there is at least an entry so evaluator can compute per-query metrics
         run[qid] = doc_scores
 
         if query_number % 10 == 0 or query_number == total_queries:
@@ -262,7 +246,6 @@ def main():
 
     stage += 1
     _log_stage(stage, total_stages, "Save metrics", "Write the aggregated scores to a JSON file under server/data for later comparison.")
-    # write out results
     out_dir = SERVER_ROOT / "data" / args.dataset / "eval_results"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{args.dataset}_{args.split}_pipeline_metrics.json"

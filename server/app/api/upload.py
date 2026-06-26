@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from celery.result import AsyncResult
 from app.rag.pipeline import ingest_document, vector_store
-from app.loaders.pdf import load_pdf
+from app.loaders import load_document
 from app.celery_worker import celery_app
 import os
 import uuid
@@ -15,15 +15,28 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_UPLOAD_MB = 25
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
-ALLOWED_EXTENSIONS = {"pdf"}
-ALLOWED_CONTENT_TYPES = {"application/pdf"}
+ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "bmp", "tiff", "tif", "webp"}
+
+IMAGE_MIME_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "bmp": "image/bmp",
+    "tiff": "image/tiff",
+    "tif": "image/tiff",
+    "webp": "image/webp",
+}
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    *IMAGE_MIME_TYPES.values(),
+}
 
 
 def _sanitize_filename(name: str) -> str:
-    base = os.path.basename(name or "document.pdf")
-    # Keep filenames filesystem-safe while preserving readability.
+    base = os.path.basename(name or "document")
     cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", base)
-    return cleaned or "document.pdf"
+
+    return cleaned or "document"
 
 
 def _delete_uploaded_files(file_names: list[str]) -> int:
@@ -64,9 +77,9 @@ async def upload_file(file: UploadFile = File(...)):
     with open(save_path, "wb") as f:
         f.write(raw)
 
-    text = load_pdf(save_path)
+    text = load_document(save_path)
     if not text or not text.strip():
-        raise HTTPException(status_code=422, detail="No extractable text found in PDF")
+        raise HTTPException(status_code=422, detail="No extractable text found in document")
 
     task = ingest_document.delay(text, source=original_name, stored_filename=safe_name)
 
@@ -114,11 +127,11 @@ def clear_documents():
     deleted_chunks = vector_store.clear_documents()
     deleted_files = _delete_uploaded_files(stored_files)
 
-    # Best-effort cleanup for older uploads that may not have metadata mapping.
-    for leftover in Path(UPLOAD_DIR).glob("*.pdf"):
-        if leftover.is_file():
-            leftover.unlink(missing_ok=True)
-            deleted_files += 1
+    for ext in ALLOWED_EXTENSIONS:
+        for leftover in Path(UPLOAD_DIR).glob(f"*__*.{ext}"):
+            if leftover.is_file():
+                leftover.unlink(missing_ok=True)
+                deleted_files += 1
 
     return {
         "message": "All documents removed from context",

@@ -10,10 +10,8 @@ export default function ChatMessage({ message }) {
 
   return (
     <div className={`${styles.messageWrapper} ${containerClass}`}>
-      {/* Text content */}
       {content && <div className={messageClass}>{content}</div>}
 
-      {/* Files preview */}
       {files.length > 0 && (
         <div className={styles.filesWrapper}>
           {files.map((f, idx) => (
@@ -27,7 +25,6 @@ export default function ChatMessage({ message }) {
                 ({Math.round(f.file.size / 1024)} KB)
               </span>
 
-              {/* Progress bar */}
               {!f.uploaded && !f.error && (
                 <div className={styles.progressBarWrapper}>
                   <div
@@ -37,7 +34,6 @@ export default function ChatMessage({ message }) {
                 </div>
               )}
 
-              {/* Error message */}
               {f.error && (
                 <span className={styles.errorMessage}>❌ {f.error}</span>
               )}
@@ -46,7 +42,6 @@ export default function ChatMessage({ message }) {
         </div>
       )}
 
-      {/* Optional sources */}
       {sources && sources.length > 0 && (
         <ul className={styles.sourcesList}>
           {sources.map((s, idx) => (

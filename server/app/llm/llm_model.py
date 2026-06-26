@@ -32,9 +32,6 @@ _model: Optional[AutoModelForCausalLM] = None
 _model_lock = Lock()
 
 
-# -----------------------------
-# Quantization
-# -----------------------------
 def _bnb_config():
     return BitsAndBytesConfig(
         load_in_4bit=True,
@@ -43,9 +40,6 @@ def _bnb_config():
     )
 
 
-# -----------------------------
-# Model loader
-# -----------------------------
 def load_model():
     global _tokenizer, _model
 
@@ -101,9 +95,6 @@ def load_model():
         _model.eval()
 
 
-# -----------------------------
-# Build chat messages
-# -----------------------------
 def build_messages(question: str, context: str, history_messages: Optional[List[Dict[str, str]]] = None):
 
     system_prompt = (
@@ -132,9 +123,6 @@ def build_messages(question: str, context: str, history_messages: Optional[List[
     return messages
 
 
-# -----------------------------
-# Clean model output (minimal)
-# -----------------------------
 import re
 
 _TRANSCRIPT_MARKER_RE = re.compile(r"\b(?:user|assistant|system)\s*:", flags=re.IGNORECASE)
@@ -145,7 +133,6 @@ def sanitize_generated_text(text: str) -> str:
     if not text:
         return "I don't know."
 
-    # If the model starts replaying chat transcript, keep only the answer prefix.
     marker = _TRANSCRIPT_MARKER_RE.search(text)
     if marker:
         text = text[:marker.start()].strip()
@@ -163,22 +150,16 @@ def sanitize_generated_text(text: str) -> str:
 def clean_output(decoded: str, prompt: str) -> str:
     text = decoded
 
-    # Extract assistant response only (after last "assistant" marker)
-    # This handles cases where the full prompt is included in decoded
     parts = text.split("assistant")
     if len(parts) > 1:
-        # Take everything after the last "assistant" marker
         text = parts[-1].strip()
     else:
-        # Fallback: try to remove prompt prefix
         if text.startswith(prompt):
             text = text[len(prompt):].strip()
 
     return sanitize_generated_text(text)
 
-# -----------------------------
-# Generate answer
-# -----------------------------
+
 def generate_answer(
     question: str,
     context: str,
@@ -219,9 +200,6 @@ def generate_answer(
     return answer if answer else "I don't know."
 
 
-# -----------------------------
-# Streaming version
-# -----------------------------
 def stream_answer(
     question: str,
     context: str,

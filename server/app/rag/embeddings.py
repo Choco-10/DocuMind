@@ -15,7 +15,6 @@ LOCAL_FILES_ONLY = (
     or _env_true("TRANSFORMERS_OFFLINE")
 )
 
-# Load small, fast pre-trained model
 try:
     if not torch.cuda.is_available():
         raise RuntimeError(
@@ -37,30 +36,10 @@ except Exception as e:
     ) from e
 
 def get_embedding(text: str) -> List[float]:
-    """
-    Converts text into an embedding vector.
-    
-    Args:
-        text: Text string to embed.
-    
-    Returns:
-        List of floats representing embedding.
-    """
     return embed_model.encode(text).tolist()
 
 
 def get_embeddings(texts: List[str], batch_size: int = 512) -> List[List[float]]:
-    """
-    Converts a list of text strings into a list of embedding vectors using batching.
-    
-    Args:
-        texts: List of text strings to embed.
-        batch_size: Batch size to use for SentenceTransformer.encode.
-    
-    Returns:
-        List of lists of floats representing embeddings.
-    """
     if not texts:
         return []
     return embed_model.encode(texts, batch_size=batch_size, show_progress_bar=False).tolist()
-

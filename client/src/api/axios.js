@@ -8,7 +8,6 @@ const api = axios.create({
   },
 });
 
-// Optional but useful: global error logging
 api.interceptors.response.use(
   (response) => response,
   (error) => {

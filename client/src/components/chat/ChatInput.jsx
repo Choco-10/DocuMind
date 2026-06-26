@@ -2,42 +2,36 @@ import { useState } from "react";
 import styles from "./ChatInput.module.css";
 
 export default function ChatInput({ onSend }) {
-  const [value, setValue] = useState(""); // message text
-  const [files, setFiles] = useState([]); // selected files
-  const [isSending, setIsSending] = useState(false); // loading state
+  const [value, setValue] = useState("");
+  const [files, setFiles] = useState([]);
+  const [isSending, setIsSending] = useState(false);
 
-  // Add new files from input
   const handleFileChange = (e) => {
     const newFiles = Array.from(e.target.files);
     setFiles((prev) => [...prev, ...newFiles]);
-    e.target.value = ""; // reset input
+    e.target.value = "";
   };
 
-  // Remove a file from preview
   const removeFile = (idx) => {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Send message + files to parent
   const handleSend = async () => {
     if (!value.trim() && files.length === 0) return;
-    if (isSending) return; // Prevent duplicate sends
+    if (isSending) return;
 
     const contentToSend = value.trim();
     const filesToSend = files;
 
-    // Clear UI immediately so typing box does not wait for server response/stream
     setValue("");
     setFiles([]);
 
     setIsSending(true);
     try {
-      // Pass content and files to Chat.jsx handleSend
       await onSend({ content: contentToSend, files: filesToSend });
     } catch (err) {
       console.error("Send failed:", err);
 
-      // Restore unsent content so user can retry
       setValue(contentToSend);
       setFiles(filesToSend);
     } finally {
@@ -47,7 +41,6 @@ export default function ChatInput({ onSend }) {
 
   return (
     <div className={styles.container}>
-      {/* Textarea for message */}
       <textarea
         className={styles.textarea}
         rows={1}
@@ -56,15 +49,14 @@ export default function ChatInput({ onSend }) {
         onChange={(e) => setValue(e.target.value)}
       />
 
-      {/* File input */}
       <input
         type="file"
         multiple
+        accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.tif,.webp"
         onChange={handleFileChange}
         className={styles.fileInput}
       />
 
-      {/* File preview */}
       {files.length > 0 && (
         <div className={styles.filePreview}>
           {files.map((file, idx) => (
@@ -76,7 +68,6 @@ export default function ChatInput({ onSend }) {
         </div>
       )}
 
-      {/* Send button */}
       <button className={styles.button} onClick={handleSend} disabled={isSending}>
         {isSending ? "Sending..." : "Send"}
       </button>
